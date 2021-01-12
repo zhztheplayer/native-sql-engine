@@ -170,9 +170,15 @@ if(DEBUG)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -DDEBUG -DDEBUG_LEVEL_1 -DDEBUG_LEVEL_2")
 endif()
 
-find_library(ARROW_LIB arrow)
-find_library(PARQUET_LIB parquet)
-find_library(GANDIVA_LIB gandiva)
+if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+  find_library(ARROW_LIB arrow PATHS /root/Documents/SourceCode/arrow/cpp/cmake-build-debug-withgandiva/bundle PATH_SUFFIXES lib64)
+  find_library(PARQUET_LIB parquet PATHS /root/Documents/SourceCode/arrow/cpp/cmake-build-debug-withgandiva/bundle PATH_SUFFIXES lib64)
+  find_library(GANDIVA_LIB gandiva PATHS /root/Documents/SourceCode/arrow/cpp/cmake-build-debug-withgandiva/bundle PATH_SUFFIXES lib64)
+else()
+  find_library(ARROW_LIB arrow PATHS /root/Documents/SourceCode/arrow/cpp/cmake-build-release-withgandiva/bundle PATH_SUFFIXES lib64)
+  find_library(PARQUET_LIB parquet PATHS /root/Documents/SourceCode/arrow/cpp/cmake-build-release-withgandiva/bundle PATH_SUFFIXES lib64)
+  find_library(GANDIVA_LIB gandiva PATHS /root/Documents/SourceCode/arrow/cpp/cmake-build-release-withgandiva/bundle PATH_SUFFIXES lib64)
+endif()
 
 if(NOT ARROW_LIB)
     message(FATAL_ERROR "Arrow library not found")
@@ -263,7 +269,15 @@ else()
 target_link_libraries(spark_columnar_jni
                       LINK_PUBLIC ${ARROW_LIB} ${PARQUET_LIB} ${GANDIVA_LIB}  ${PROTOBUF_LIBRARY})
 endif()
-target_include_directories(spark_columnar_jni PUBLIC ${CMAKE_SYSTEM_INCLUDE_PATH} ${JNI_INCLUDE_DIRS} ${source_root_directory} ${PROTO_OUTPUT_DIR} ${PROTOBUF_INCLUDE})
+
+if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+  target_include_directories(spark_columnar_jni PUBLIC ${CMAKE_SYSTEM_INCLUDE_PATH} ${JNI_INCLUDE_DIRS} ${source_root_directory} ${PROTO_OUTPUT_DIR} ${PROTOBUF_INCLUDE}
+          /root/Documents/SourceCode/arrow/cpp/cmake-build-debug-withgandiva/bundle/include)
+else()
+  target_include_directories(spark_columnar_jni PUBLIC ${CMAKE_SYSTEM_INCLUDE_PATH} ${JNI_INCLUDE_DIRS} ${source_root_directory} ${PROTO_OUTPUT_DIR} ${PROTOBUF_INCLUDE}
+          /root/Documents/SourceCode/arrow/cpp/cmake-build-release-withgandiva/bundle/include)
+endif()
+
 set_target_properties(spark_columnar_jni PROPERTIES
                       LIBRARY_OUTPUT_DIRECTORY ${root_directory}/releases
 )
