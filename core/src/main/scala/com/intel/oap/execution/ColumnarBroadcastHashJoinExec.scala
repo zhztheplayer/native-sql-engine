@@ -25,13 +25,13 @@ import com.intel.oap.vectorized._
 import com.intel.oap.ColumnarPluginConfig
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{UserAddedJarUtils, Utils, ExecutorManager}
+import org.apache.spark.util.{ExecutorManager, UserAddedJarUtils, Utils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.{ColumnarBroadcastExchangeExec, _}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 import scala.collection.JavaConverters._
@@ -39,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.catalyst.expressions.BindReferences._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarBatch}
 
 import scala.collection.mutable.ListBuffer
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
@@ -226,6 +226,9 @@ case class ColumnarBroadcastHashJoinExec(
     streamedPlan.executeColumnar().mapPartitions { iter =>
       ExecutorManager.tryTaskSet(numaBindingInfo)
       val hashRelationKernel = new ExpressionEvaluator()
+      ColumnarBroadcastExchangeExec.cache2.synchronized {
+        ColumnarBroadcastExchangeExec.cache2.append(hashRelationKernel)
+      }
       val hashRelationBatchHolder: ListBuffer[ColumnarBatch] = ListBuffer()
       // received broadcast value contain a hashmap and raw recordBatch
       val beforeFetch = System.nanoTime()
@@ -244,6 +247,11 @@ case class ColumnarBroadcastHashJoinExec(
           Field.nullable("result", new ArrowType.Int(32, true)))
       hashRelationKernel.build(hash_relation_schema, Lists.newArrayList(hash_relation_expr), true)
       val hashRelationResultIterator = hashRelationKernel.finishByIterator()
+
+      ColumnarBroadcastExchangeExec.cache.synchronized {
+        ColumnarBroadcastExchangeExec.cache.append(hashRelationResultIterator)
+      }
+
       // we need to set original recordBatch to hashRelationKernel
       var numRows = 0
       while (depIter.hasNext) {
@@ -521,4 +529,9 @@ case class ColumnarBroadcastHashJoinExec(
     }
 
   }
+}
+
+object ColumnarBroadcastHashJoinExec {
+  val cache = ListBuffer[BatchIterator]()
+  val cache2 = ListBuffer[ExpressionEvaluator]()
 }

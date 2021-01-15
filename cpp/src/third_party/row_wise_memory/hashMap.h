@@ -118,7 +118,7 @@ static inline int getKeyLength(char* base) { return *((int*)(base)) & 0x00ff; }
 
 /* If keySize > 0, we should put raw key also in keyArray */
 /* Other wise we put key in bytesMap */
-static inline unsafeHashMap* createUnsafeHashMap(arrow::MemoryPool* pool,
+static unsafeHashMap* createUnsafeHashMap(arrow::MemoryPool* pool,
                                                  int initArrayCapacity,
                                                  int initialHashCapacity,
                                                  int keySize = -1) {

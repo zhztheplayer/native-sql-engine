@@ -54,8 +54,10 @@ class ColumnarHashedRelation(
 
   def close(waitTime: Int): Future[Int] = Future {
     Thread.sleep(waitTime * 1000)
+    println("[MEMORY LEAK DEBUG] Timeout")
     if (refCnt.get == 0) {
       if (!closed.getAndSet(true)) {
+        println("[MEMORY LEAK DEBUG] Closing")
         hashRelationObj.close
         arrowColumnarBatch.foreach(_.close)
       }

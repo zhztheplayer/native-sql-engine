@@ -126,6 +126,7 @@ class HashRelation {
       : HashRelation(hash_relation_column) {
     hash_table_ =
         createUnsafeHashMap(ctx->memory_pool(), 1024 * 1024, 256 * 1024 * 1024, key_size);
+    std::cout << "Created hash table " << hash_table_ << std::endl;
     ctx_ = ctx;
     arrayid_list_.reserve(64);
   }
@@ -133,6 +134,7 @@ class HashRelation {
   ~HashRelation() {
     if (hash_table_ != nullptr && !unsafe_set) {
       destroyHashMap(hash_table_);
+      std::cout << "Destroyed hash table " << hash_table_ << std::endl;
       hash_table_ = nullptr;
     }
   }

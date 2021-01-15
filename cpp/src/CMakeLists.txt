@@ -16,7 +16,7 @@ set(CMAKE_BUILD_TYPE  "Release")
 option(USE_AVX512 "Build with AVX-512 optimizations" OFF)
 option(TESTS "Build the tests" OFF)
 option(BENCHMARKS "Build the benchmarks" OFF)
-option(DEBUG "Enable Debug Info" OFF)
+option(DEBUG "Enable Debug Info" ON)
 
 set(BOOST_MIN_VERSION "1.42.0")
 find_package(Boost REQUIRED)
@@ -167,7 +167,7 @@ endmacro()
 endif()
 
 if(DEBUG)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -DDEBUG -DDEBUG_LEVEL_1 -DDEBUG_LEVEL_2")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb -O0")
 endif()
 
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
