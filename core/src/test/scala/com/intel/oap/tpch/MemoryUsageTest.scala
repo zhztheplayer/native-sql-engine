@@ -22,32 +22,29 @@ import java.lang.management.ManagementFactory
 import java.nio.charset.StandardCharsets
 import java.sql.Date
 import java.text.SimpleDateFormat
-import java.util.{Scanner, StringTokenizer}
 import java.util.concurrent.{Executors, ScheduledFuture, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.{Scanner, StringTokenizer}
 
-import com.intel.oap.execution.ColumnarBroadcastExchangeExec
 import com.intel.oap.tags.{CommentOnContextPR, TestAndWriteLogs}
 import com.intel.oap.tpch.MemoryUsageTest.{RAMMonitor, commentOnContextPR, stdoutLog}
-import com.intel.oap.vectorized.{ExpressionEvaluator, ExpressionEvaluatorJniWrapper}
+import com.intel.oap.vectorized.ExpressionEvaluator
 import io.netty.util.internal.PlatformDependent
 import io.prestosql.tpch._
-import javax.imageio.ImageIO
-import org.apache.arrow.dataset.jni.NativeMemoryPool
 import org.apache.commons.io.FileUtils
 import org.apache.commons.lang.StringUtils
 import org.apache.log4j.{Level, LogManager}
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.execution.ColumnarBroadcastExchangeExec
 import org.apache.spark.sql.execution.datasources.v2.arrow.SparkMemoryUtils
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.codehaus.jackson.map.ObjectMapper
-import org.knowm.xchart.{BitmapEncoder, XYChartBuilder}
 import org.knowm.xchart.BitmapEncoder.BitmapFormat
 import org.knowm.xchart.XYSeries.XYSeriesRenderStyle
 import org.knowm.xchart.style.Styler.ChartTheme
+import org.knowm.xchart.{BitmapEncoder, XYChartBuilder}
 import org.kohsuke.github.{GHIssueComment, GitHubBuilder}
 
 import scala.collection.mutable.ArrayBuffer
@@ -485,6 +482,31 @@ class MemoryUsageTest extends QueryTest with SharedSparkSession {
         "Appending RAM report line: " + line
       }
 
+      def cleanHashMaps = {
+        ColumnarBroadcastExchangeExec.cache.synchronized {
+          println("Closing %d iterators".format(ColumnarBroadcastExchangeExec.cache.size))
+          ColumnarBroadcastExchangeExec.cache.foreach { a =>
+            try {
+              a.close()
+            } catch {
+              case _: Throwable =>
+            }
+          }
+          ColumnarBroadcastExchangeExec.cache.clear()
+        }
+        ColumnarBroadcastExchangeExec.cache2.synchronized {
+          println("Closing %d expressions".format(ColumnarBroadcastExchangeExec.cache2.size))
+          ColumnarBroadcastExchangeExec.cache2.foreach { a =>
+            try {
+              a.close()
+            } catch {
+              case _: Throwable =>
+            }
+          }
+          ColumnarBroadcastExchangeExec.cache2.clear()
+        }
+      }
+
       try {
         createTPCHTables()
         writeCommentLine("```")
@@ -493,6 +515,7 @@ class MemoryUsageTest extends QueryTest with SharedSparkSession {
           writeCommentLine("Iteration %d:".format(executionId))
           (5 to 5).foreach(i => {
             runTPCHQuery(i, executionId)
+            cleanHashMaps
             writeCommentLine("  Query %d: %s".format(i, genReportLine()))
             ramMonitor.writeImage(commentImageOutputPath)
           })
@@ -503,23 +526,19 @@ class MemoryUsageTest extends QueryTest with SharedSparkSession {
       }
       writeCommentLine("```")
 
-      ColumnarBroadcastExchangeExec.cache.synchronized {
-        writeCommentLine("Closing %d iterators".format(ColumnarBroadcastExchangeExec.cache.size))
-        ColumnarBroadcastExchangeExec.cache.foreach(_.close())
-        ColumnarBroadcastExchangeExec.cache.clear()
-      }
-      ColumnarBroadcastExchangeExec.cache.synchronized {
-        writeCommentLine("Closing %d expressions".format(ColumnarBroadcastExchangeExec.cache2.size))
-        ColumnarBroadcastExchangeExec.cache2.foreach(_.close())
-        ColumnarBroadcastExchangeExec.cache2.clear()
-      }
 
       val allocators = SparkMemoryUtils.getLeakedAllocators()
       val pools = SparkMemoryUtils.getLeakedMemoryPools()
       println("Remaining size of leak allocators: %d".format(allocators.map(a => a.getAllocatedMemory).sum))
       println("Remaining size of leak memory pools: %d".format(pools.map(p => p.getBytesAllocated).sum))
       println("Remaining size of netty allocated: %d".format(PlatformDependent.usedDirectMemory()))
-      Thread.sleep(40000L)
+      (0 until 360).foreach { i =>
+        if (i == 10) {
+          cleanHashMaps
+        }
+        Thread.sleep(10000L)
+        ramMonitor.writeImage(commentImageOutputPath)
+      }
       writer.close()
       ramMonitor.writeImage(commentImageOutputPath)
       ramMonitor.close()

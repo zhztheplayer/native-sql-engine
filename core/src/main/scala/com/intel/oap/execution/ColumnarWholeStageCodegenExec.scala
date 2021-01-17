@@ -18,6 +18,8 @@
 package com.intel.oap.execution
 
 import java.io.{ByteArrayInputStream, ObjectInputStream}
+import java.util.concurrent.Executors
+
 import com.intel.oap.ColumnarPluginConfig
 import com.intel.oap.execution._
 import com.intel.oap.expression._
@@ -30,9 +32,9 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarBatch}
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.util.{UserAddedJarUtils, Utils, ExecutorManager}
+import org.apache.spark.util.{ExecutorManager, UserAddedJarUtils, Utils}
 import org.apache.arrow.gandiva.expression._
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
@@ -40,6 +42,7 @@ import org.apache.arrow.vector.types.pojo.Schema
 import com.intel.oap.vectorized.ExpressionEvaluator
 import com.intel.oap.vectorized.BatchIterator
 import com.google.common.collect.Lists
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.spark.sql.execution.datasources.v2.arrow.SparkMemoryUtils
 
 import scala.collection.mutable.ListBuffer
@@ -264,7 +267,6 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
 
     val numOutputBatches = child.longMetric("numOutputBatches")
     val pipelineTime = longMetric("pipelineTime")
-    val timeout = ColumnarPluginConfig.getConf(sparkConf).broadcastCacheTimeout
 
     var build_elapse: Long = 0
     var eval_elapse: Long = 0
@@ -523,7 +525,7 @@ case class ColumnarWholeStageCodegenExec(child: SparkPlan)(val codegenStageId: I
         dependentKernelIterators.foreach(_.close)
         nativeKernel.close
         nativeIterator.close
-        relationHolder.foreach(r => r.countDownClose(timeout))
+        relationHolder.clear()
       }
       SparkMemoryUtils.addLeakSafeTaskCompletionListener[Unit](_ => {
         close

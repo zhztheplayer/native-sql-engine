@@ -19,6 +19,7 @@ package com.intel.oap.execution
 
 import java.io.{ByteArrayInputStream, ObjectInputStream}
 import java.nio.ByteBuffer
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit._
 
 import com.intel.oap.vectorized._
@@ -52,6 +53,7 @@ import org.apache.arrow.gandiva.evaluator._
 import io.netty.buffer.ArrowBuf
 import io.netty.buffer.ByteBuf
 import com.google.common.collect.Lists
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.intel.oap.expression._
 import com.intel.oap.vectorized.ExpressionEvaluator
 import org.apache.spark.sql.execution.datasources.v2.arrow.SparkMemoryUtils
@@ -221,13 +223,11 @@ case class ColumnarBroadcastHashJoinExec(
     var eval_elapse: Long = 0
     val buildInputByteBuf = buildPlan.executeBroadcast[ColumnarHashedRelation]()
 
-    val timeout = ColumnarPluginConfig.getConf(sparkConf).broadcastCacheTimeout
-
     streamedPlan.executeColumnar().mapPartitions { iter =>
       ExecutorManager.tryTaskSet(numaBindingInfo)
       val hashRelationKernel = new ExpressionEvaluator()
-      ColumnarBroadcastExchangeExec.cache2.synchronized {
-        ColumnarBroadcastExchangeExec.cache2.append(hashRelationKernel)
+      ColumnarBroadcastHashJoinExec.cache2.synchronized {
+        ColumnarBroadcastHashJoinExec.cache2.append(hashRelationKernel)
       }
       val hashRelationBatchHolder: ListBuffer[ColumnarBatch] = ListBuffer()
       // received broadcast value contain a hashmap and raw recordBatch
@@ -248,8 +248,8 @@ case class ColumnarBroadcastHashJoinExec(
       hashRelationKernel.build(hash_relation_schema, Lists.newArrayList(hash_relation_expr), true)
       val hashRelationResultIterator = hashRelationKernel.finishByIterator()
 
-      ColumnarBroadcastExchangeExec.cache.synchronized {
-        ColumnarBroadcastExchangeExec.cache.append(hashRelationResultIterator)
+      ColumnarBroadcastHashJoinExec.cache.synchronized {
+        ColumnarBroadcastHashJoinExec.cache.append(hashRelationResultIterator)
       }
 
       // we need to set original recordBatch to hashRelationKernel
@@ -297,7 +297,6 @@ case class ColumnarBroadcastHashJoinExec(
         hashRelationResultIterator.close
         nativeKernel.close
         nativeIterator.close
-        relation.countDownClose(timeout)
       }
 
       // now we can return this wholestagecodegen iter
@@ -420,7 +419,6 @@ case class ColumnarBroadcastHashJoinExec(
     val listJars = uploadAndListJars(signature)
     val buildInputByteBuf = buildPlan.executeBroadcast[ColumnarHashedRelation]()
     val hashRelationBatchHolder: ListBuffer[ColumnarBatch] = ListBuffer()
-    val timeout = ColumnarPluginConfig.getConf(sparkConf).broadcastCacheTimeout
 
     streamedPlan.executeColumnar().mapPartitions { streamIter =>
       ExecutorManager.tryTaskSet(numaBindingInfo)
@@ -487,7 +485,6 @@ case class ColumnarBroadcastHashJoinExec(
         hashRelationResultIterator.close
         nativeKernel.close
         nativeIterator.close
-        relation.countDownClose(timeout)
       }
       val resultStructType = ArrowUtils.fromArrowSchema(resCtx.outputSchema)
       val res = new Iterator[ColumnarBatch] {

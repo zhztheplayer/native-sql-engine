@@ -41,9 +41,7 @@ case class BroadcastColumnarRDD(
     (0 until numPartitioning).map { index => new BroadcastColumnarRDDPartition(index) }.toArray
   }
   override def compute(split: Partition, context: TaskContext): Iterator[ColumnarBatch] = {
-    val timeout: Int = SQLConf.get.broadcastTimeout.toInt
     val relation = inputByteBuf.value.asReadOnlyCopy
-    relation.countDownClose(timeout)
     new CloseableColumnBatchIterator(relation.getColumnarBatchAsIter)
   }
 }

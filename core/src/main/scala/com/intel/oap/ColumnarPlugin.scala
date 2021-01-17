@@ -347,7 +347,7 @@ case class ColumnarOverrideRules(session: SparkSession) extends ColumnarRule wit
     if (columnarEnabled) {
       postOverrides.setAdaptiveSupport(isSupportAdaptive)
       val tmpPlan = postOverrides(plan)
-      collapseOverrides(tmpPlan)
+      tmpPlan
     } else {
       plan
     }

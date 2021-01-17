@@ -18,17 +18,18 @@
 package org.apache.spark.sql.execution
 
 import java.io._
-import java.util.concurrent.atomic.{AtomicInteger, AtomicBoolean}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.intel.oap.expression.ConverterUtils
-import com.intel.oap.vectorized.{ArrowWritableColumnVector, SerializableObject}
+import com.intel.oap.vectorized.{ArrowWritableColumnVector, BatchIterator, ExpressionEvaluator, SerializableObject}
 import org.apache.spark.util.{KnownSizeEstimation, Utils}
 import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarBatch}
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Success}
+
 import java.util.concurrent.atomic.AtomicBoolean
+
+import sun.misc.Cleaner
 
 class ColumnarHashedRelation(
     var hashRelationObj: SerializableObject,
@@ -37,52 +38,42 @@ class ColumnarHashedRelation(
     extends Externalizable
     with KryoSerializable
     with KnownSizeEstimation {
-  val refCnt: AtomicInteger = new AtomicInteger()
   val closed: AtomicBoolean = new AtomicBoolean()
 
-  def this() = {
-    this(null, null, 0)
+  var cleaner: Cleaner = createCleaner
+
+  private def createCleaner = {
+    null
+//    Cleaner.create(this, new Runnable {
+//      override def run(): Unit = {
+//        close()
+//      }
+//    })
   }
 
   def asReadOnlyCopy(): ColumnarHashedRelation = {
     //new ColumnarHashedRelation(hashRelationObj, arrowColumnarBatch, arrowColumnarBatchSize)
-    refCnt.incrementAndGet()
     this
   }
 
   override def estimatedSize: Long = 0
 
-  def close(waitTime: Int): Future[Int] = Future {
-    Thread.sleep(waitTime * 1000)
-    println("[MEMORY LEAK DEBUG] Timeout")
-    if (refCnt.get == 0) {
-      if (!closed.getAndSet(true)) {
-        println("[MEMORY LEAK DEBUG] Closing")
-        hashRelationObj.close
-        arrowColumnarBatch.foreach(_.close)
-      }
+  def close(): Unit = {
+    if (closed.getAndSet(true)) {
+      throw new IllegalStateException("ColumnarhashedRelation already closed")
     }
-    refCnt.get
+    println("[HONGZE DEBUG] Closing ColumnarHashedRelation")
+    hashRelationObj.close
+    arrowColumnarBatch.foreach(_.close)
   }
-
-  def countDownClose(waitTime: Int = -1): Unit = {
-    val curRefCnt = refCnt.decrementAndGet()
-    if (waitTime == -1) return
-    if (curRefCnt == 0) {
-      close(waitTime).onComplete {
-        case Success(resRefCnt) => {}
-        case Failure(e) =>
-          System.err.println(s"Failed to close ColumnarHashedRelation, exception = $e")
-      }
-    }
-  }
-
-  override def finalize(): Unit = {
-    if (!closed.getAndSet(true)) {
-      hashRelationObj.close
-      arrowColumnarBatch.foreach(_.close)
-    }
-  }
+//
+//  override def finalize(): Unit = {
+//    if (!closed.getAndSet(true)) {
+//      println("[HONGZE DEBUG] Closing ColumnarHashedRelation")
+//      hashRelationObj.close
+//      arrowColumnarBatch.foreach(_.close)
+//    }
+//  }
 
   override def writeExternal(out: ObjectOutput): Unit = {
     if (closed.get()) return
@@ -99,6 +90,9 @@ class ColumnarHashedRelation(
   }
 
   override def readExternal(in: ObjectInput): Unit = {
+    if (cleaner == null) {
+      cleaner = createCleaner
+    }
     hashRelationObj = in.readObject().asInstanceOf[SerializableObject]
     val rawArrowData = in.readObject().asInstanceOf[Array[Byte]]
     arrowColumnarBatchSize = rawArrowData.length
@@ -112,6 +106,9 @@ class ColumnarHashedRelation(
   }
 
   override def read(kryo: Kryo, in: Input): Unit = {
+    if (cleaner == null) {
+      cleaner = createCleaner
+    }
     hashRelationObj =
       kryo.readObject(in, classOf[SerializableObject]).asInstanceOf[SerializableObject]
     val rawArrowData = kryo.readObject(in, classOf[Array[Byte]]).asInstanceOf[Array[Byte]]

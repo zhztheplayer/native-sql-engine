@@ -1,46 +1,16 @@
 GitHub Action TPC-H RAM usage test starts to run. Report will be continuously updated in following block.
 ```
-Before suite starts: Appending RAM report line: Off-Heap Allocated: 50 MB, Off-Heap Allocation Ratio: 3.61%, JVM Heap Used: 576 MB, JVM Heap Total: 1340 MB, Process Resident: 1390 MB, OS Used: 9516 MB
+Before suite starts: Appending RAM report line: Off-Heap Allocated: 173 MB, Off-Heap Allocation Ratio: 15.04%, JVM Heap Used: 631 MB, JVM Heap Total: 979 MB, Process Resident: 1153 MB, OS Used: 8621 MB
 Iteration 1:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 512 MB, Off-Heap Allocation Ratio: 27.58%, JVM Heap Used: 808 MB, JVM Heap Total: 1345 MB, Process Resident: 1857 MB, OS Used: 9873 MB
+  Query 5: Appending RAM report line: Off-Heap Allocated: 710 MB, Off-Heap Allocation Ratio: 41.97%, JVM Heap Used: 693 MB, JVM Heap Total: 982 MB, Process Resident: 1693 MB, OS Used: 10276 MB
 Iteration 2:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 712 MB, Off-Heap Allocation Ratio: 33.48%, JVM Heap Used: 877 MB, JVM Heap Total: 1416 MB, Process Resident: 2128 MB, OS Used: 10152 MB
+  Query 5: Appending RAM report line: Off-Heap Allocated: 987 MB, Off-Heap Allocation Ratio: 50.97%, JVM Heap Used: 629 MB, JVM Heap Total: 949 MB, Process Resident: 1937 MB, OS Used: 10602 MB
 Iteration 3:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 962 MB, Off-Heap Allocation Ratio: 38.02%, JVM Heap Used: 541 MB, JVM Heap Total: 1568 MB, Process Resident: 2530 MB, OS Used: 10561 MB
+  Query 5: Appending RAM report line: Off-Heap Allocated: 1218 MB, Off-Heap Allocation Ratio: 56.66%, JVM Heap Used: 683 MB, JVM Heap Total: 931 MB, Process Resident: 2149 MB, OS Used: 10836 MB
 Iteration 4:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 1129 MB, Off-Heap Allocation Ratio: 41.65%, JVM Heap Used: 461 MB, JVM Heap Total: 1582 MB, Process Resident: 2712 MB, OS Used: 10744 MB
+  Query 5: Appending RAM report line: Off-Heap Allocated: 1450 MB, Off-Heap Allocation Ratio: 62.15%, JVM Heap Used: 738 MB, JVM Heap Total: 883 MB, Process Resident: 2333 MB, OS Used: 11099 MB
 Iteration 5:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 1256 MB, Off-Heap Allocation Ratio: 44.25%, JVM Heap Used: 1030 MB, JVM Heap Total: 1582 MB, Process Resident: 2838 MB, OS Used: 10878 MB
+  Query 5: Appending RAM report line: Off-Heap Allocated: 1547 MB, Off-Heap Allocation Ratio: 62.51%, JVM Heap Used: 526 MB, JVM Heap Total: 928 MB, Process Resident: 2475 MB, OS Used: 11249 MB
 Iteration 6:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 1409 MB, Off-Heap Allocation Ratio: 46.00%, JVM Heap Used: 942 MB, JVM Heap Total: 1654 MB, Process Resident: 3064 MB, OS Used: 11105 MB
+  Query 5: Appending RAM report line: Off-Heap Allocated: 1662 MB, Off-Heap Allocation Ratio: 64.06%, JVM Heap Used: 732 MB, JVM Heap Total: 932 MB, Process Resident: 2594 MB, OS Used: 11865 MB
 Iteration 7:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 1586 MB, Off-Heap Allocation Ratio: 48.87%, JVM Heap Used: 788 MB, JVM Heap Total: 1659 MB, Process Resident: 3246 MB, OS Used: 11290 MB
-Iteration 8:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 1749 MB, Off-Heap Allocation Ratio: 50.23%, JVM Heap Used: 671 MB, JVM Heap Total: 1734 MB, Process Resident: 3484 MB, OS Used: 11528 MB
-Iteration 9:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 1880 MB, Off-Heap Allocation Ratio: 52.03%, JVM Heap Used: 1238 MB, JVM Heap Total: 1734 MB, Process Resident: 3614 MB, OS Used: 11661 MB
-Iteration 10:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 2053 MB, Off-Heap Allocation Ratio: 54.05%, JVM Heap Used: 983 MB, JVM Heap Total: 1745 MB, Process Resident: 3799 MB, OS Used: 11847 MB
-Iteration 11:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 2204 MB, Off-Heap Allocation Ratio: 54.37%, JVM Heap Used: 793 MB, JVM Heap Total: 1850 MB, Process Resident: 4055 MB, OS Used: 12103 MB
-Iteration 12:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 2362 MB, Off-Heap Allocation Ratio: 56.08%, JVM Heap Used: 1360 MB, JVM Heap Total: 1850 MB, Process Resident: 4213 MB, OS Used: 12264 MB
-Iteration 13:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 2529 MB, Off-Heap Allocation Ratio: 57.57%, JVM Heap Used: 986 MB, JVM Heap Total: 1863 MB, Process Resident: 4392 MB, OS Used: 12447 MB
-Iteration 14:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 2665 MB, Off-Heap Allocation Ratio: 57.25%, JVM Heap Used: 690 MB, JVM Heap Total: 1990 MB, Process Resident: 4656 MB, OS Used: 12713 MB
-Iteration 15:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 2809 MB, Off-Heap Allocation Ratio: 58.53%, JVM Heap Used: 1259 MB, JVM Heap Total: 1990 MB, Process Resident: 4799 MB, OS Used: 12857 MB
-Iteration 16:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 3008 MB, Off-Heap Allocation Ratio: 60.04%, JVM Heap Used: 821 MB, JVM Heap Total: 2002 MB, Process Resident: 5011 MB, OS Used: 13069 MB
-Iteration 17:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 3165 MB, Off-Heap Allocation Ratio: 61.25%, JVM Heap Used: 1386 MB, JVM Heap Total: 2002 MB, Process Resident: 5167 MB, OS Used: 13227 MB
-Iteration 18:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 3390 MB, Off-Heap Allocation Ratio: 63.05%, JVM Heap Used: 931 MB, JVM Heap Total: 1987 MB, Process Resident: 5377 MB, OS Used: 13438 MB
-Iteration 19:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 3553 MB, Off-Heap Allocation Ratio: 64.14%, JVM Heap Used: 1498 MB, JVM Heap Total: 1987 MB, Process Resident: 5540 MB, OS Used: 13602 MB
-Iteration 20:
-  Query 5: Appending RAM report line: Off-Heap Allocated: 3701 MB, Off-Heap Allocation Ratio: 65.41%, JVM Heap Used: 1053 MB, JVM Heap Total: 1956 MB, Process Resident: 5657 MB, OS Used: 13748 MB
-```
-Closing 0 iterators
-Closing 0 expressions

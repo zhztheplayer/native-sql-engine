@@ -13,8 +13,8 @@ import java.nio.ByteBuffer
 import scala.concurrent.duration.NANOSECONDS
 import scala.concurrent.{ExecutionContext, Promise}
 import scala.util.control.NonFatal
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.{broadcast, SparkException}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import org.apache.spark.{SparkException, broadcast}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.launcher.SparkLauncher
@@ -22,12 +22,12 @@ import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{ColumnarHashedRelation, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{ColumnarHashedRelation, SQLExecution, SparkPlan}
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarBatch}
 import org.apache.spark.TaskContext
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
@@ -125,6 +125,9 @@ case class ColumnarBroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan) 
             hash_relation_function,
             Field.nullable("result", new ArrowType.Int(32, true)))
         val hashRelationKernel = new ExpressionEvaluator()
+        ColumnarBroadcastExchangeExec.cache2.synchronized {
+          ColumnarBroadcastExchangeExec.cache2.append(hashRelationKernel)
+        }
         hashRelationKernel.build(
           hash_relation_schema,
           Lists.newArrayList(hash_relation_expr),
@@ -147,7 +150,9 @@ case class ColumnarBroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan) 
           }
         }
         val hashRelationResultIterator = hashRelationKernel.finishByIterator()
-
+        ColumnarBroadcastExchangeExec.cache.synchronized {
+          ColumnarBroadcastExchangeExec.cache.append(hashRelationResultIterator)
+        }
         val hashRelationObj = hashRelationResultIterator.nextHashRelationObject()
         relation =
           new ColumnarHashedRelation(hashRelationObj, _input.toArray, size_raw).asReadOnlyCopy
@@ -203,10 +208,6 @@ case class ColumnarBroadcastExchangeExec(mode: BroadcastMode, child: SparkPlan) 
         case e: Throwable =>
           promise.failure(e)
           throw e
-      } finally {
-        val timeout: Int = SQLConf.get.broadcastTimeout.toInt
-        if (relation != null)
-          relation.asInstanceOf[ColumnarHashedRelation].countDownClose(timeout)
       }
     }
   }
@@ -288,4 +289,9 @@ class ColumnarBroadcastExchangeAdaptor(mode: BroadcastMode, child: SparkPlan)
       (that canEqual this) && super.equals(that)
     case _ => false
   }
+}
+
+object ColumnarBroadcastExchangeExec {
+  val cache = ListBuffer[BatchIterator]()
+  val cache2 = ListBuffer[ExpressionEvaluator]()
 }
