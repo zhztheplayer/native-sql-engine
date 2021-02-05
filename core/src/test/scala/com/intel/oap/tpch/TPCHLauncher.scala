@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package com.intel.oap.tpch
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.launcher.SparkLauncher
 
-class TestSparkSessionSuite extends SparkFunSuite {
-  test("default session is set in constructor") {
-    val session = new TestSparkSession()
-    assert(SparkSession.getDefaultSession.contains(session))
-    session.stop()
+object TPCHLauncher {
+  def main(args: Array[String]): Unit = {
+    val spark = new SparkLauncher()
+        .setSparkHome("/root/Documents/SourceCode/sparkV/dist/")
+        .setAppResource("/root/Documents/SourceCode/native-sql-engine/core/target/spark-columnar-core-1.1.0-fat-tests.jar")
+        .setMainClass("com.intel.oap.tpch.TPCHSparkAPP")
+        .setMaster("spark://localhost:7078")
+        .launch
   }
 }
