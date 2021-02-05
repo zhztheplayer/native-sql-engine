@@ -15,15 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package com.intel.oap.tpc;
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
+import com.intel.oap.vectorized.JniUtils;
 
-class TestSparkSessionSuite extends SparkFunSuite {
-  test("default session is set in constructor") {
-    val session = new TestSparkSession()
-    assert(SparkSession.getDefaultSession.contains(session))
-    session.stop()
+import java.io.IOException;
+
+public class MallocUtils {
+
+  static {
+    try {
+      JniUtils.getInstance();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
+
+  /**
+   * Visible for testing: Try turning back allocated native memory to OS. This might have no effect
+   * when using Jemalloc.
+   */
+  public static native void mallocTrim();
+
+  /**
+   * Visible for testing: Print malloc statistics.
+   */
+  public static native void mallocStats();
 }
