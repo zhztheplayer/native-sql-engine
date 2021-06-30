@@ -802,7 +802,7 @@ class ConditionedJoinArraysVisitorImpl : public ExprVisitorImpl {
         for (int i = 0; i < p_->in_record_batch_->num_columns(); i++) {
           in.push_back(p_->in_record_batch_->column(i));
         }
-        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->Evaluate(in));
+        TIME_MICRO_OR_RAISE(p_->elapse_time_, kernel_->Evaluate(std::move(p_->in_iterator_)));
       } break;
       default:
         return arrow::Status::NotImplemented(

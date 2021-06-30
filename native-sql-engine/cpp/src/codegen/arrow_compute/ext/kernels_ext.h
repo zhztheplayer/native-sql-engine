@@ -19,6 +19,7 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
+#include <arrow/util/iterator.h>
 #include <arrow/type_fwd.h>
 #include <gandiva/node.h>
 #include <gandiva/tree_expr_builder.h>
@@ -42,6 +43,10 @@ class KernalBase {
   virtual arrow::Status Evaluate(const ArrayList& in) {
     return arrow::Status::NotImplemented("Evaluate is abstract interface for ",
                                          kernel_name_, ", input is arrayList.");
+  }
+  virtual arrow::Status Evaluate(arrow::RecordBatchIterator in) {
+    return arrow::Status::NotImplemented("Evaluate is abstract interface for ",
+                                         kernel_name_, ", input is interator.");
   }
   virtual arrow::Status Evaluate(const ArrayList& in, ArrayList* out) {
     return arrow::Status::NotImplemented("Evaluate is abstract interface for ",
@@ -378,7 +383,7 @@ class ConditionedJoinArraysKernel : public KernalBase {
       const std::vector<std::shared_ptr<arrow::Field>>& left_field_list,
       const std::vector<std::shared_ptr<arrow::Field>>& right_field_list,
       const std::shared_ptr<arrow::Schema>& result_schema);
-  arrow::Status Evaluate(const ArrayList& in) override;
+  arrow::Status Evaluate(arrow::RecordBatchIterator in) override;
   arrow::Status MakeResultIterator(
       std::shared_ptr<arrow::Schema> schema,
       std::shared_ptr<ResultIterator<arrow::RecordBatch>>* out) override;
