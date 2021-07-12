@@ -20,6 +20,8 @@
 #include <arrow/compute/api.h>
 #include <arrow/status.h>
 #include <arrow/type_fwd.h>
+#include <arrow/util/iterator.h>
+#include <arrow/record_batch.h>
 
 #include "precompile/type_traits.h"
 
@@ -27,6 +29,46 @@ using sparkcolumnarplugin::precompile::enable_if_number_or_decimal;
 using sparkcolumnarplugin::precompile::enable_if_string_like;
 using sparkcolumnarplugin::precompile::StringArray;
 using sparkcolumnarplugin::precompile::TypeTraits;
+
+class LazyBatchIterator {
+ public:
+  LazyBatchIterator(arrow::RecordBatchIterator in) {
+    this->in_ = std::move(in);
+  }
+
+  std::shared_ptr<arrow::RecordBatch> GetBatch(int32_t batch_id) {
+    for (int i = current_batch_id_ + 1; i <= batch_id; i++) {
+      std::shared_ptr<arrow::RecordBatch> next = in_.Next().ValueOrDie();
+      if (next == nullptr) {
+        return nullptr;
+      }
+      cache_.push_back(next);
+      ref_cnts_.push_back(0);
+    }
+    for (int i = 0; i <= batch_id; i++) {
+      if (ref_cnts_[i] > 0) {
+        ref_cnts_[i] = ref_cnts_[i] + 1;
+      }
+    }
+    current_batch_id_ = batch_id;
+    return cache_[current_batch_id_];
+  }
+
+  void ReleaseLT(int32_t batch_id_upper) {
+    for (int i = 0; i < batch_id_upper; i++) {
+      ref_cnts_[i] = ref_cnts_[i] - 1;
+      if (ref_cnts_[i] == 0) {
+        cache_[i] = nullptr;
+      }
+    }
+  }
+
+ private:
+  arrow::RecordBatchIterator in_;
+  std::vector<std::shared_ptr<arrow::RecordBatch>> cache_;
+  std::vector<int32_t> ref_cnts_;
+  int32_t current_batch_id_ = 0;
+};
 
 class RelationColumn {
  public:
@@ -38,7 +80,7 @@ class RelationColumn {
   virtual arrow::Status FromLazyBatchIterator(std::shared_ptr<LazyBatchIterator> in, int field_id) {
     return arrow::Status::NotImplemented("RelationColumn AppendColumn is abstract.");
   };
-  virtual void Advance(int array_id) {
+  virtual arrow::Status Advance(int array_id) {
     return arrow::Status::NotImplemented("RelationColumn Advance is abstract.");
   };
   virtual arrow::Status ReleaseArrayLT(int array_id) = 0;
@@ -78,6 +120,7 @@ class TypedRelationColumn<DataType, enable_if_number_or_decimal<DataType>>
     for (int i = 0; i < array_id; i++) {
       array_vector_[i] = nullptr; // fixme using reset()?
     }
+    return arrow::Status::OK();
   }
   arrow::Status GetArrayVector(std::vector<std::shared_ptr<arrow::Array>>* out) override {
     for (auto arr : array_vector_) {
@@ -120,6 +163,7 @@ class TypedRelationColumn<DataType, enable_if_string_like<DataType>>
     for (int i = 0; i < array_id; i++) {
       array_vector_[i] = nullptr; // fixme using reset()?
     }
+    return arrow::Status::OK();
   }
   arrow::Status GetArrayVector(std::vector<std::shared_ptr<arrow::Array>>* out) override {
     for (auto arr : array_vector_) {
@@ -148,57 +192,60 @@ class TypedLazyLoadRelationColumn<DataType, enable_if_number_or_decimal<DataType
     : public RelationColumn {
  public:
   using T = typename TypeTraits<DataType>::CType;
-  TypedLazyLoadRelationColumn() {}
+  TypedLazyLoadRelationColumn() = default;
 
   bool IsNull(int array_id, int id) override {
     Advance(array_id);
-    return delegated->IsNull(array_id, id);
+    return delegated.IsNull(array_id, id);
   }
 
-  bool IsEqualTo(int x_array_id, int x_id, int y_array_id, int y_id) {
+  bool IsEqualTo(int x_array_id, int x_id, int y_array_id, int y_id) override {
     Advance(x_array_id);
     Advance(y_array_id);
-    return delegated->IsEqualTo(x_array_id, x_id, y_array_id, y_id);
+    return delegated.IsEqualTo(x_array_id, x_id, y_array_id, y_id);
   }
 
-  arrow::Status FromLazyBatchIterator(std::shared_ptr<LazyBatchIterator> in, int field_id) {
+  arrow::Status FromLazyBatchIterator(std::shared_ptr<LazyBatchIterator> in, int field_id) override {
     in_ = in;
     field_id_ = field_id;
+    return arrow::Status::OK();
   };
 
-  void Advance(int array_id) {
+  arrow::Status Advance(int array_id) override {
     if (array_id <= current_array_id_) {
-      return;
+      return arrow::Status::OK();
     }
     for (int i = current_array_id_ + 1; i <= array_id; i++) {
       std::shared_ptr<arrow::RecordBatch> batch = in_->GetBatch(i);
       std::shared_ptr<arrow::Array> array = batch->column(field_id_);
-      delegated->AppendColumn(array);
+      delegated.AppendColumn(array);
     }
     current_array_id_ = array_id;
+    return arrow::Status::OK();
   }
 
-  arrow::Status ReleaseArrayLT(int array_id) {
-    delegated->ReleaseArray(array_id);
+  arrow::Status ReleaseArrayLT(int array_id) override {
+    delegated.ReleaseArrayLT(array_id);
     in_->ReleaseLT(array_id);
+    return arrow::Status::OK();
   }
   
   arrow::Status GetArrayVector(std::vector<std::shared_ptr<arrow::Array>>* out) override {
-    return delegated->GetArrayVector(out);
+    return delegated.GetArrayVector(out);
   }
   
   T GetValue(int array_id, int id) {
     Advance(array_id);
-    return delegated->GetValue(array_id, id);
+    return delegated.GetValue(array_id, id);
   }
-  bool HasNull() { return has_null_; }
+  bool HasNull() override { return has_null_; }
 
  private:
   using ArrayType = typename TypeTraits<DataType>::ArrayType;
   std::shared_ptr<LazyBatchIterator> in_;
   TypedRelationColumn<DataType> delegated;
   int current_array_id_ = 0;
-  int field_id_;
+  int field_id_ = -1;
   bool has_null_ = true; // fixme always true
 };
 
@@ -206,98 +253,62 @@ template <typename DataType>
 class TypedLazyLoadRelationColumn<DataType, enable_if_string_like<DataType>>
     : public RelationColumn {
  public:
-  TypedLazyLoadRelationColumn() {}
+  TypedLazyLoadRelationColumn() = default;
   bool IsNull(int array_id, int id) override {
     Advance(array_id);
-    return delegated->IsNull(array_id, id);
+    return delegated.IsNull(array_id, id);
   }
-  bool IsEqualTo(int x_array_id, int x_id, int y_array_id, int y_id) {
+  bool IsEqualTo(int x_array_id, int x_id, int y_array_id, int y_id) override {
     Advance(x_array_id);
     Advance(y_array_id);
-    return delegated->IsEqualTo(x_array_id, x_id, y_array_id, y_id);
+    return delegated.IsEqualTo(x_array_id, x_id, y_array_id, y_id);
   }
 
-  arrow::Status FromLazyBatchIterator(std::shared_ptr<LazyBatchIterator> in, int field_id) {
+  arrow::Status FromLazyBatchIterator(std::shared_ptr<LazyBatchIterator> in, int field_id) override {
     in_ = in;
     field_id_ = field_id;
+    return arrow::Status::OK();
   };
-  
-  void Advance(int array_id) {
+
+  arrow::Status Advance(int array_id) override {
     if (array_id <= current_array_id_) {
-      return;
+      return arrow::Status::OK();
     }
     for (int i = current_array_id_ + 1; i <= array_id; i++) {
       std::shared_ptr<arrow::RecordBatch> batch = in_->GetBatch(i);
       std::shared_ptr<arrow::Array> array = batch->column(field_id_);
-      delegated->AppendColumn(array);
+      delegated.AppendColumn(array);
     }
     current_array_id_ = array_id;
+    return arrow::Status::OK();
   }
   
-  arrow::Status ReleaseArrayLT(int array_id) {
-    delegated->ReleaseArray(array_id);
+  arrow::Status ReleaseArrayLT(int array_id) override {
+    delegated.ReleaseArrayLT(array_id);
     in_->ReleaseLT(array_id);
+    return arrow::Status::OK();
   }
   
   arrow::Status GetArrayVector(std::vector<std::shared_ptr<arrow::Array>>* out) override {
-    return delegated->GetArrayVector(out);
+    return delegated.GetArrayVector(out);
   }
   
   std::string GetValue(int array_id, int id) {
     Advance(array_id);
-    return delegated->GetValue(array_id, id);
+    return delegated.GetValue(array_id, id);
   }
   
-  bool HasNull() { return has_null_; }
+  bool HasNull() override { return has_null_; }
 
  private:
   std::vector<std::shared_ptr<StringArray>> array_vector_;
   std::shared_ptr<LazyBatchIterator> in_;
   TypedRelationColumn<DataType> delegated;
   int32_t current_array_id_ = 0;
-  int32_t field_id_;
+  int32_t field_id_ = -1;
   bool has_null_ = true; // fixme always true
 };
 
 arrow::Status MakeLazyLoadRelationColumn(uint32_t data_type_id,
                                  std::shared_ptr<RelationColumn>* out);
 
-class LazyBatchIterator {
- public:
-  LazyBatchIterator(arrow::RecordBatchIterator in) {
-    this->in_ = std::move(in);
-  }
-
-  std::shared_ptr<arrow::RecordBatch> GetBatch(int32_t batch_id) {
-    for (int i = current_batch_id_ + 1; i <= batch_id; i++) {
-      ARROW_ASSIGN_OR_RAISE(auto next, in_.Next())
-      if (next == nullptr) {
-        return nullptr;
-      }
-      cache_.push_back(next.ValueOrDie())
-      ref_cnts_.push_back(0);
-    }
-    for (int i = 0; i <= batch_id; i++) {
-      if (ref_cnts_[i] > 0) {
-        ref_cnts_[i] = ref_cnts_[i] + 1;
-      }
-    }
-    current_batch_id_ = batch_id;
-    return cache_[current_batch_id_];
-  }
-
-  void ReleaseLT(int32_t batch_id_upper) {
-    for (int i = 0; i < batch_id_upper; i++) {
-      ref_cnts_[i] = ref_cnts_[i] - 1;
-      if (ref_cnts_[i] == 0) {
-        cache_[i] = nullptr;
-      }
-    }
-  }
-  
- private:
-  arrow::RecordBatchIterator in_;
-  std::vector<arrow::RecordBatch> cache_;
-  std::vector<int32_t> ref_cnts_;
-  int32_t current_batch_id_ = 0;
-};
