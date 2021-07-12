@@ -26,7 +26,7 @@
 #include <arrow/record_batch.h>
 #include <arrow/util/compression.h>
 #include <arrow/util/iterator.h>
-#include <jni/dataset/jni_util.h> // todo dynamic link libarrow_dataset_jni.so
+#include <arrow/jniutil/jni_util.h> // todo dynamic link libarrow_dataset_jni.so
 #include <jni.h>
 #include <malloc.h>
 
@@ -114,7 +114,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> FromBytes(
     JNIEnv* env, std::shared_ptr<arrow::Schema> schema, jbyteArray bytes) {
   ARROW_ASSIGN_OR_RAISE(
       std::shared_ptr<arrow::RecordBatch> batch,
-      arrow::dataset::jni::DeserializeUnsafeFromJava(env, schema, bytes))
+      arrow::jniutil::DeserializeUnsafeFromJava(env, schema, bytes))
   return batch;
 }
 
@@ -138,7 +138,7 @@ arrow::Result<arrow::RecordBatchIterator> MakeJavaRecordBatchIterator(
         }
         auto bytes = (jbyteArray)env->CallObjectMethod(
             java_serialized_record_batch_iterator, serialized_record_batch_iterator_next);
-        RETURN_NOT_OK(arrow::dataset::jni::CheckException(env));
+        RETURN_NOT_OK(arrow::jniutil::CheckException(env));
         ARROW_ASSIGN_OR_RAISE(auto batch, FromBytes(env, schema_moved, bytes));
         return batch;
       });
