@@ -142,6 +142,7 @@ arrow::Result<arrow::RecordBatchIterator> MakeJavaRecordBatchIterator(
         ARROW_ASSIGN_OR_RAISE(auto batch, FromBytes(env, schema_moved, bytes));
         return batch;
       });
+  return itr;
 }
 
 jobject MakeRecordBatchBuilder(JNIEnv* env, std::shared_ptr<arrow::Schema> schema,

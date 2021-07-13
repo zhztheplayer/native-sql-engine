@@ -33,13 +33,12 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarBatch}
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import scala.collection.mutable.ListBuffer
-
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -47,15 +46,14 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.gandiva.expression._
 import org.apache.arrow.gandiva.evaluator._
+
 import org.apache.arrow.memory.ArrowBuf
-import com.google.common.collect.Lists
-import com.intel.oap.expression.ColumnarSortMergeJoin.build_input_arrow_schema
+
+import com.google.common.collect.Lists;
 
 import org.apache.spark.sql.types.{DataType, DecimalType, StructType}
 import com.intel.oap.vectorized.ExpressionEvaluator
 import com.intel.oap.vectorized.BatchIterator
-import org.apache.arrow.dataset.jni.NativeSerializedRecordBatchIterator
-import org.apache.arrow.dataset.jni.UnsafeRecordBatchSerializer
 
 /**
  * Performs a sort merge join of two child relations.
@@ -105,7 +103,39 @@ class ColumnarSortMergeJoin(
       case _ =>
         (buildIter, streamIter)
     }
-    if (realbuildIter.hasNext) {
+
+    while (realbuildIter.hasNext) {
+      if (build_cb != null) {
+        build_cb = null
+      }
+      build_cb = realbuildIter.next()
+      val beforeBuild = System.nanoTime()
+        val projectedBuildKeyCols: List[ArrowWritableColumnVector] = if (buildProjector != null) {
+          val builderOrdinalList = buildProjector.getOrdinalList
+          val builderAttributes = buildProjector.output
+          val builderProjectCols = builderOrdinalList.map(i => {
+            build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]
+          })
+          buildProjector.evaluate(build_cb.numRows, builderProjectCols.map(_.getValueVector()))
+        } else {
+          List[ArrowWritableColumnVector]()
+        }
+        val buildCols = (0 until build_cb.numCols).toList.map(i =>
+          build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]) ::: projectedBuildKeyCols
+        val build_rb =
+          ConverterUtils.createArrowRecordBatch(build_cb.numRows, buildCols.map(_.getValueVector))
+
+      (0 until buildCols.size).toList.foreach(i =>
+        buildCols(i).retain())
+      inputBatchHolder += build_cb
+      prober.evaluate(build_rb)
+      prepareTime += NANOSECONDS.toMillis(System.nanoTime() - beforeBuild)
+      ConverterUtils.releaseArrowRecordBatch(build_rb)
+      projectedBuildKeyCols.foreach(v => v.close)
+    }
+    if (build_cb != null) {
+      build_cb = null
+    } else {
       val res = new Iterator[ColumnarBatch] {
         override def hasNext: Boolean = {
           false
@@ -113,60 +143,13 @@ class ColumnarSortMergeJoin(
 
         override def next(): ColumnarBatch = {
           val resultColumnVectors = ArrowWritableColumnVector
-              .allocateColumns(0, resultSchema)
-              .toArray
+            .allocateColumns(0, resultSchema)
+            .toArray
           new ColumnarBatch(resultColumnVectors.map(_.asInstanceOf[ColumnVector]), 0)
         }
       }
       return res
     }
-
-    // Used as ABI to prevent from serializing buffer data
-    val serializedItr: NativeSerializedRecordBatchIterator =
-      new NativeSerializedRecordBatchIterator {
-        var cached0: Option[ArrowRecordBatch] = None
-        var cached1: Option[List[ArrowWritableColumnVector]] = None
-
-        override def hasNext: Boolean = {
-          realbuildIter.hasNext
-        }
-
-        override def next(): Array[Byte] = {
-          cached0.foreach(ConverterUtils.releaseArrowRecordBatch)
-          cached1.foreach(_.foreach(v => v.close()))
-          build_cb = realbuildIter.next()
-          val beforeBuild = System.nanoTime()
-          val projectedBuildKeyCols: List[ArrowWritableColumnVector] = if (buildProjector != null) {
-            val builderOrdinalList = buildProjector.getOrdinalList
-            val builderAttributes = buildProjector.output
-            val builderProjectCols = builderOrdinalList.map(i => {
-              build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]
-            })
-            buildProjector.evaluate(build_cb.numRows, builderProjectCols.map(_.getValueVector()))
-          } else {
-            List[ArrowWritableColumnVector]()
-          }
-          val buildCols = (0 until build_cb.numCols).toList.map(i =>
-            build_cb.column(i).asInstanceOf[ArrowWritableColumnVector]) ::: projectedBuildKeyCols
-          val build_rb =
-            ConverterUtils.createArrowRecordBatch(build_cb.numRows, buildCols.map(_.getValueVector))
-          cached0 = Some(build_rb)
-          cached1 = Some(projectedBuildKeyCols)
-          prepareTime += NANOSECONDS.toMillis(System.nanoTime() - beforeBuild)
-          serialize(build_rb)
-        }
-
-        private def serialize(batch: ArrowRecordBatch) =
-          UnsafeRecordBatchSerializer.serializeUnsafe(batch)
-
-        override def close(): Unit = {
-          cached0.foreach(ConverterUtils.releaseArrowRecordBatch)
-          cached1.foreach(_.foreach(v => v.close()))
-        }
-      }
-
-    prober.evaluate(serializedItr)
-
     val beforeBuild = System.nanoTime()
     probe_iterator = prober.finishByIterator()
     prepareTime += NANOSECONDS.toMillis(System.nanoTime() - beforeBuild)
